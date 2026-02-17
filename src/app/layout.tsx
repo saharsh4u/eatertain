@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Sora } from "next/font/google";
+import { Fraunces, Lobster, Sora } from "next/font/google";
 import "./globals.css";
 
 const displayFont = Fraunces({
@@ -15,6 +15,12 @@ const bodyFont = Sora({
   weight: ["400", "500", "600", "700"],
 });
 
+const accentFont = Lobster({
+  subsets: ["latin"],
+  variable: "--font-accent",
+  weight: "400",
+});
+
 export const metadata: Metadata = {
   title: "Eatertain | Zero scrolling. Three perfect picks.",
   description: "Tell Eatertain what you are eating and get three context-first picks instantly.",
@@ -27,7 +33,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${displayFont.variable} ${bodyFont.variable} antialiased`}>{children}</body>
+      <body
+        className={`${displayFont.variable} ${bodyFont.variable} ${accentFont.variable} antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }
