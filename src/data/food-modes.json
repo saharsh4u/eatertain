@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "quick-breakfast",
+    "label": "Quick Breakfast",
+    "emoji": "🥣",
+    "defaults": { "energy": "low", "comfort": 0.7, "chaos": 0.2 },
+    "durationWindow": { "min": 8, "max": 22 },
+    "tagBoosts": ["short-form", "upbeat", "light-comedy", "vlog", "feel-good"],
+    "tagPenalties": ["heavy-drama", "high-intensity", "complex-plot"]
+  },
+  {
+    "slug": "fast-food",
+    "label": "Fast Food",
+    "emoji": "🍔",
+    "defaults": { "energy": "medium", "comfort": 0.8, "chaos": 0.4 },
+    "durationWindow": { "min": 12, "max": 30 },
+    "tagBoosts": ["light-comedy", "rewatch", "episodic", "standup", "familiar"],
+    "tagPenalties": ["heavy-drama", "high-intensity"]
+  },
+  {
+    "slug": "comfort-meal",
+    "label": "Comfort Meal",
+    "emoji": "🍲",
+    "defaults": { "energy": "low", "comfort": 0.95, "chaos": 0.1 },
+    "durationWindow": { "min": 12, "max": 35 },
+    "tagBoosts": ["cozy", "familiar", "rewatch", "light-comedy", "feel-good"],
+    "tagPenalties": ["high-intensity", "heavy-drama", "complex-plot"]
+  },
+  {
+    "slug": "healthy-meal",
+    "label": "Healthy Meal",
+    "emoji": "🥗",
+    "defaults": { "energy": "medium", "comfort": 0.5, "chaos": 0.2 },
+    "durationWindow": { "min": 10, "max": 28 },
+    "tagBoosts": ["educational", "calm", "docu", "food", "travel"],
+    "tagPenalties": ["high-chaos", "heavy-drama"]
+  },
+  {
+    "slug": "date-night",
+    "label": "Date Night / Fancy",
+    "emoji": "🍷",
+    "defaults": { "energy": "low", "comfort": 0.6, "chaos": 0.2 },
+    "durationWindow": { "min": 15, "max": 35 },
+    "tagBoosts": ["aesthetic", "travel", "food", "calm", "feel-good"],
+    "tagPenalties": ["high-chaos", "high-intensity", "complex-plot"]
+  },
+  {
+    "slug": "snack-break",
+    "label": "Snack",
+    "emoji": "🍿",
+    "defaults": { "energy": "high", "comfort": 0.4, "chaos": 0.6 },
+    "durationWindow": { "min": 8, "max": 18 },
+    "tagBoosts": ["short-form", "sketch", "standup", "upbeat", "music"],
+    "tagPenalties": ["heavy-drama", "complex-plot"]
+  },
+  {
+    "slug": "late-night",
+    "label": "Late Night Bite",
+    "emoji": "🌙",
+    "defaults": { "energy": "low", "comfort": 0.85, "chaos": 0.15 },
+    "durationWindow": { "min": 10, "max": 26 },
+    "tagBoosts": ["calm", "cozy", "dialogue", "rewatch", "familiar"],
+    "tagPenalties": ["high-intensity", "high-chaos"]
+  },
+  {
+    "slug": "family-dinner",
+    "label": "Family Dinner",
+    "emoji": "🍛",
+    "defaults": { "energy": "medium", "comfort": 0.7, "chaos": 0.3 },
+    "durationWindow": { "min": 15, "max": 35 },
+    "tagBoosts": ["feel-good", "episodic", "familiar", "light-comedy", "food"],
+    "tagPenalties": ["high-intensity", "heavy-drama"]
+  }
+]
