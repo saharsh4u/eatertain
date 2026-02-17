@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fef9e3;
+  --background: #fffaf4;
   --surface: #ffffff;
-  --surface-soft: #f9e17c;
-  --foreground: #220000;
-  --muted: #4f4f4f;
-  --accent-red: #d42213;
-  --accent-yellow: #fbda50;
-  --accent-green: #a7e396;
-  --accent-peach: #ff8562;
+  --surface-soft: #fff1de;
+  --foreground: #2f2219;
+  --muted: #6f5e52;
+  --accent-red: #e7682f;
+  --accent-yellow: #ffd29f;
+  --accent-green: #cce8bf;
+  --accent-peach: #ffd8b6;
 }
 
 @theme inline {
@@ -35,9 +35,11 @@ body {
   color: var(--foreground);
   font-family: var(--font-body), sans-serif;
   background:
-    radial-gradient(circle at 25% 12%, rgba(251, 218, 80, 0.3), transparent 36%),
-    radial-gradient(circle at 74% 6%, rgba(212, 34, 19, 0.12), transparent 32%),
-    linear-gradient(180deg, #fef9e3 0%, #fff7dc 48%, #fef9e3 100%);
+    radial-gradient(circle at 18% 8%, rgba(255, 216, 182, 0.45), transparent 34%),
+    radial-gradient(circle at 82% 0%, rgba(255, 232, 190, 0.36), transparent 30%),
+    linear-gradient(180deg, #fffaf4 0%, #fff7ed 55%, #fffaf6 100%);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -60,7 +62,7 @@ select {
 
 @media (prefers-reduced-motion: no-preference) {
   main {
-    animation: rise-in 440ms ease-out;
+    animation: rise-in 420ms ease-out;
   }
 }
 

@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import foodModesData from "@/data/food-modes.json";
 import type {
   EnergyLevel,
   EventType,
   FoodMode,
   PlatformOption,
+  RankedItem,
+  RecommendInput,
   RecommendResult,
 } from "@/lib/types";
 
@@ -20,6 +22,72 @@ const PLATFORM_OPTIONS: Array<"Any" | PlatformOption> = [
   "Hulu",
   "Max",
   "Disney+",
+];
+
+const ENERGY_OPTIONS: EnergyLevel[] = ["low", "medium", "high"];
+
+const SAVED_PAIRS_KEY = "eatertain:saved-pairs";
+const RECENT_PAIRS_KEY = "eatertain:recent-pairs";
+
+type QuickPresetId =
+  | "ten-minutes"
+  | "eating-alone"
+  | "with-kids"
+  | "background-noise";
+
+interface QuickPreset {
+  id: QuickPresetId;
+  label: string;
+  subtitle: string;
+}
+
+interface SuggestionContext {
+  foodModeSlug: string;
+  energy: EnergyLevel;
+  platform: "Any" | PlatformOption;
+  preset: QuickPresetId | null;
+}
+
+interface SavedPair {
+  id: string;
+  title: string;
+  platform: PlatformOption;
+  url: string;
+  whyThisMatch: string;
+  savedAt: string;
+  foodModeLabel: string;
+  energy: EnergyLevel;
+}
+
+interface RecentPairing {
+  id: string;
+  createdAt: string;
+  foodModeLabel: string;
+  energy: EnergyLevel;
+  heroTitle: string;
+}
+
+const QUICK_PRESETS: QuickPreset[] = [
+  {
+    id: "ten-minutes",
+    label: "I have 10 minutes",
+    subtitle: "Fast, short picks",
+  },
+  {
+    id: "eating-alone",
+    label: "I'm eating alone",
+    subtitle: "Calm solo vibe",
+  },
+  {
+    id: "with-kids",
+    label: "I'm with kids",
+    subtitle: "Family-safe choices",
+  },
+  {
+    id: "background-noise",
+    label: "Background noise only",
+    subtitle: "Audio-friendly content",
+  },
 ];
 
 function getDefaultEnergy(): EnergyLevel {
@@ -55,37 +123,173 @@ function prettyEnergy(energy: EnergyLevel) {
   return `${energy.slice(0, 1).toUpperCase()}${energy.slice(1)} energy`;
 }
 
+function getPresetDefaults(preset: QuickPresetId): Partial<SuggestionContext> {
+  switch (preset) {
+    case "ten-minutes":
+      return {
+        foodModeSlug: "snack-break",
+        energy: "high",
+        platform: "YouTube",
+      };
+    case "eating-alone":
+      return {
+        foodModeSlug: "healthy-meal",
+        energy: "low",
+        platform: "Any",
+      };
+    case "with-kids":
+      return {
+        foodModeSlug: "family-dinner",
+        energy: "medium",
+      };
+    case "background-noise":
+      return {
+        energy: "low",
+      };
+    default:
+      return {};
+  }
+}
+
+function getPresetConstraints(preset: QuickPresetId | null): Partial<RecommendInput> {
+  if (!preset) {
+    return {};
+  }
+
+  switch (preset) {
+    case "ten-minutes":
+      return {
+        maxDurationMins: 15,
+        maxPlotDensity: 2,
+        preferredTags: ["short-form", "upbeat", "standup", "sketch"],
+      };
+    case "eating-alone":
+      return {
+        maxIntensity: 3,
+        preferredTags: ["docu", "educational", "calm", "travel"],
+      };
+    case "with-kids":
+      return {
+        maxIntensity: 2,
+        maxPlotDensity: 2,
+        requiredTags: ["feel-good", "familiar", "episodic"],
+        preferredTags: ["feel-good", "familiar", "episodic"],
+      };
+    case "background-noise":
+      return {
+        requireAudioFollowable: true,
+        requireDropInFriendly: true,
+        maxIntensity: 3,
+        maxPlotDensity: 2,
+        preferredTags: ["dialogue", "cozy", "rewatch"],
+      };
+    default:
+      return {};
+  }
+}
+
+function readStoredArray<T>(key: string): T[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function HomeOnePage() {
   const [foodModeSlug, setFoodModeSlug] = useState<string>(foodModes[0]?.slug ?? "");
   const [energy, setEnergy] = useState<EnergyLevel>(getDefaultEnergy);
   const [platform, setPlatform] = useState<"Any" | PlatformOption>("Any");
+  const [quickPreset, setQuickPreset] = useState<QuickPresetId | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RecommendResult | null>(null);
-  const [shareMessage, setShareMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
 
-  const selectedFoodMode = useMemo(
-    () => foodModes.find((mode) => mode.slug === foodModeSlug),
-    [foodModeSlug],
-  );
+  const [savedPairs, setSavedPairs] = useState<SavedPair[]>([]);
+  const [recentPairs, setRecentPairs] = useState<RecentPairing[]>([]);
+  const [activeContext, setActiveContext] = useState<SuggestionContext | null>(null);
+
+  const activeFoodMode = useMemo(() => {
+    const modeSlug = activeContext?.foodModeSlug ?? foodModeSlug;
+    return foodModes.find((mode) => mode.slug === modeSlug);
+  }, [activeContext, foodModeSlug]);
 
   const heroPick = useMemo(() => {
     if (!result) return null;
     return result.items.find((item) => item.id === result.heroPickId) ?? result.items[0];
   }, [result]);
 
-  async function trackEvent(eventType: EventType, itemId?: string) {
+  useEffect(() => {
+    setSavedPairs(readStoredArray<SavedPair>(SAVED_PAIRS_KEY));
+    setRecentPairs(readStoredArray<RecentPairing>(RECENT_PAIRS_KEY));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    localStorage.setItem(SAVED_PAIRS_KEY, JSON.stringify(savedPairs.slice(0, 20)));
+  }, [savedPairs]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    localStorage.setItem(RECENT_PAIRS_KEY, JSON.stringify(recentPairs.slice(0, 10)));
+  }, [recentPairs]);
+
+  function getCurrentContext(): SuggestionContext {
+    return {
+      foodModeSlug,
+      energy,
+      platform,
+      preset: quickPreset,
+    };
+  }
+
+  function buildPayload(context: SuggestionContext, excludeIds: string[]) {
+    const presetConstraints = getPresetConstraints(context.preset);
+
+    return {
+      foodMode: context.foodModeSlug,
+      energy: context.energy,
+      platform: context.platform === "Any" ? undefined : context.platform,
+      excludeIds,
+      ...presetConstraints,
+    };
+  }
+
+  async function trackEvent(
+    eventType: EventType,
+    itemId?: string,
+    details?: Record<string, string | number | boolean>,
+    contextOverride?: SuggestionContext,
+  ) {
     try {
+      const context = contextOverride ?? activeContext ?? getCurrentContext();
       await fetch("/api/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventType,
-          foodMode: foodModeSlug,
-          energy,
-          platform,
+          foodMode: context.foodModeSlug,
+          energy: context.energy,
+          platform: context.platform,
           itemId,
           sessionId: getSessionId(),
+          details,
         }),
       });
     } catch {
@@ -93,22 +297,37 @@ export function HomeOnePage() {
     }
   }
 
-  async function requestSuggestions(excludeIds: string[] = []) {
-    if (!selectedFoodMode) return;
+  function pushRecentPair(payload: RecommendResult, context: SuggestionContext) {
+    const modeLabel = foodModes.find((mode) => mode.slug === context.foodModeSlug)?.label || "Meal";
+    const heroTitle = payload.items[0]?.title ?? "Untitled";
+
+    const entry: RecentPairing = {
+      id: `${Date.now()}-${heroTitle}`,
+      createdAt: new Date().toISOString(),
+      foodModeLabel: modeLabel,
+      energy: context.energy,
+      heroTitle,
+    };
+
+    setRecentPairs((current) => [entry, ...current].slice(0, 10));
+  }
+
+  async function requestSuggestions(context: SuggestionContext, excludeIds: string[] = []) {
+    const mode = foodModes.find((item) => item.slug === context.foodModeSlug);
+    if (!mode) {
+      setError("Select a meal mode to continue.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
+    setActionMessage("");
 
     try {
       const response = await fetch("/api/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          foodMode: selectedFoodMode.slug,
-          energy,
-          platform: platform === "Any" ? undefined : platform,
-          excludeIds,
-        }),
+        body: JSON.stringify(buildPayload(context, excludeIds)),
       });
 
       const payload = (await response.json()) as RecommendResult | { error: string };
@@ -117,8 +336,14 @@ export function HomeOnePage() {
         throw new Error(message);
       }
 
-      setResult(payload as RecommendResult);
-      await trackEvent("view-results");
+      const recommendation = payload as RecommendResult;
+      setResult(recommendation);
+      setActiveContext(context);
+      pushRecentPair(recommendation, context);
+
+      await trackEvent("view-results", undefined, {
+        preset: context.preset ?? "none",
+      }, context);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to generate picks.");
     } finally {
@@ -128,19 +353,41 @@ export function HomeOnePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await requestSuggestions();
+    await requestSuggestions(getCurrentContext());
   }
 
   async function handleRemix() {
     if (!result) return;
-    await trackEvent("regenerate");
-    await requestSuggestions(result.items.map((item) => item.id));
+    const context = activeContext ?? getCurrentContext();
+    await trackEvent("regenerate", undefined, { trigger: "remix" }, context);
+    await requestSuggestions(
+      context,
+      result.items.map((item) => item.id),
+    );
+  }
+
+  async function handleSurpriseMe() {
+    const randomContext: SuggestionContext = {
+      foodModeSlug: foodModes[Math.floor(Math.random() * foodModes.length)]?.slug ?? "snack-break",
+      energy: ENERGY_OPTIONS[Math.floor(Math.random() * ENERGY_OPTIONS.length)] ?? "medium",
+      platform: PLATFORM_OPTIONS[Math.floor(Math.random() * PLATFORM_OPTIONS.length)] ?? "Any",
+      preset: null,
+    };
+
+    setQuickPreset(null);
+    setFoodModeSlug(randomContext.foodModeSlug);
+    setEnergy(randomContext.energy);
+    setPlatform(randomContext.platform);
+
+    await trackEvent("regenerate", undefined, { trigger: "surprise" }, randomContext);
+    await requestSuggestions(randomContext);
   }
 
   async function handleShare() {
-    if (!heroPick || !selectedFoodMode) return;
+    if (!heroPick || !activeFoodMode) return;
 
-    const shareText = `${selectedFoodMode.label} + ${prettyEnergy(energy)} -> ${heroPick.title} (${heroPick.platform}). ${heroPick.whyThisMatch}`;
+    const context = activeContext ?? getCurrentContext();
+    const shareText = `${activeFoodMode.label} + ${prettyEnergy(context.energy)} -> ${heroPick.title} (${heroPick.platform}). ${heroPick.whyThisMatch}`;
 
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
@@ -149,54 +396,115 @@ export function HomeOnePage() {
           text: shareText,
           url: typeof window !== "undefined" ? window.location.href : undefined,
         });
-        setShareMessage("Shared");
+        setActionMessage("Shared");
       } else if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(shareText);
-        setShareMessage("Copied");
+        setActionMessage("Copied to clipboard");
       } else {
-        setShareMessage("Sharing unavailable");
+        setActionMessage("Sharing unavailable");
       }
       await trackEvent("share", heroPick.id);
     } catch {
-      setShareMessage("Share canceled");
+      setActionMessage("Share canceled");
     }
   }
 
-  return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-      <div className="pointer-events-none absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[#fbda50]/75 blur-3xl" />
-      <div className="pointer-events-none absolute -left-24 top-56 h-60 w-60 rounded-full bg-[#d42213]/35 blur-3xl" />
-      <div className="pointer-events-none absolute -right-24 bottom-10 h-64 w-64 rounded-full bg-[#a7e396]/45 blur-3xl" />
+  async function handleSaveForLater(item: RankedItem) {
+    const context = activeContext ?? getCurrentContext();
+    const modeLabel = foodModes.find((mode) => mode.slug === context.foodModeSlug)?.label || "Meal";
 
-      <div className="mx-auto max-w-7xl">
-        <section className="relative rounded-[2rem] border-[3px] border-[#220000] bg-[#fef9e3]/90 px-5 py-5 shadow-[10px_10px_0_0_#220000] sm:px-8 sm:py-6">
-          <div className="absolute -right-3 -top-3 rotate-6 rounded-full border-[3px] border-[#220000] bg-[#fbda50] px-4 py-1 text-xs font-black uppercase tracking-[0.18em] text-[#220000]">
-            One page
+    const saved: SavedPair = {
+      id: item.id,
+      title: item.title,
+      platform: item.platform,
+      url: item.url,
+      whyThisMatch: item.whyThisMatch,
+      savedAt: new Date().toISOString(),
+      foodModeLabel: modeLabel,
+      energy: context.energy,
+    };
+
+    setSavedPairs((current) => [saved, ...current.filter((entry) => entry.id !== item.id)].slice(0, 20));
+    setActionMessage("Saved for later");
+    await trackEvent("save", item.id);
+  }
+
+  function applyQuickPreset(preset: QuickPresetId) {
+    const defaults = getPresetDefaults(preset);
+
+    setQuickPreset(preset);
+    if (defaults.foodModeSlug) setFoodModeSlug(defaults.foodModeSlug);
+    if (defaults.energy) setEnergy(defaults.energy);
+    if (defaults.platform) setPlatform(defaults.platform);
+  }
+
+  return (
+    <main className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 sm:py-7 lg:px-10 lg:py-9">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_8%,rgba(255,193,156,0.35),transparent_32%),radial-gradient(circle_at_88%_16%,rgba(250,214,146,0.3),transparent_28%),linear-gradient(180deg,#fffaf2_0%,#fff6e9_52%,#fffaf4_100%)]" />
+      <div className="pointer-events-none absolute -left-24 top-24 h-64 w-64 rounded-full bg-[#ffe3cf] blur-[110px]" />
+      <div className="pointer-events-none absolute -right-12 top-12 h-72 w-72 rounded-full bg-[#ffd9b0] blur-[110px]" />
+
+      <div className="relative mx-auto max-w-7xl">
+        <section className="rounded-[2.2rem] border border-[#e8d8c4] bg-white/85 px-6 py-6 shadow-[0_24px_58px_-34px_rgba(87,60,36,0.28)] backdrop-blur sm:px-9 sm:py-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#7a6351] sm:text-[13px]">
+              Moment-based entertainment picker
+            </p>
+            <span className="rounded-full border border-[#edd7b4] bg-[#fff5dd] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a5a2f]">
+              Cozy mode
+            </span>
           </div>
 
-          <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-[#220000]/75 sm:text-[14px]">
-            Moment-based entertainment picker
-          </p>
-
-          <h1 className="mt-3 text-center font-display text-[clamp(2rem,7.1vw,5.1rem)] leading-[0.92] tracking-tight text-[#220000]">
-            Tell us what
-            <br />
-            you&apos;re <span className="font-[var(--font-accent)] text-[#d42213]">eating</span>.
+          <h1 className="mt-4 text-center font-display text-[clamp(1.75rem,4.9vw,3.95rem)] leading-[1.02] tracking-tight text-[#2d1f14]">
+            Tell us what you&apos;re <span className="font-[var(--font-accent)] text-[#e7682f]">eating</span>.
             <br />
             We pick what to watch.
           </h1>
         </section>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1.06fr_0.94fr]">
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.06fr_0.94fr]">
           <form
             onSubmit={handleSubmit}
-            className="rounded-[2rem] border-[3px] border-[#220000] bg-white/90 p-5 shadow-[10px_10px_0_0_#220000] sm:p-6"
+            className="rounded-[2rem] border border-[#e7d8c7] bg-white/92 p-5 shadow-[0_22px_52px_-34px_rgba(87,60,36,0.26)] sm:p-6"
           >
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#220000]/70">
-              Set your vibe
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#7e6858]">Set your vibe</p>
+              {quickPreset ? (
+                <button
+                  type="button"
+                  onClick={() => setQuickPreset(null)}
+                  className="rounded-full border border-[#ead8c3] bg-[#fff7ed] px-3 py-1 text-[11px] font-semibold text-[#7e6858] transition hover:bg-[#ffefdc]"
+                >
+                  Clear preset
+                </button>
+              ) : null}
+            </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b7564]">Quick presets</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {QUICK_PRESETS.map((preset) => {
+                  const selected = preset.id === quickPreset;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyQuickPreset(preset.id)}
+                      className={`rounded-2xl border px-3 py-2.5 text-left transition ${
+                        selected
+                          ? "border-[#f2c790] bg-[#fff4e6] shadow-[0_10px_24px_-20px_rgba(194,109,40,0.45)]"
+                          : "border-[#eadcca] bg-[#fffdf9] hover:border-[#f2cfaa] hover:bg-[#fff8ef]"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-[#3c2b1d]">{preset.label}</p>
+                      <p className="mt-0.5 text-xs text-[#7f6a5a]">{preset.subtitle}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {foodModes.map((mode) => {
                 const selected = mode.slug === foodModeSlug;
                 return (
@@ -204,31 +512,31 @@ export function HomeOnePage() {
                     key={mode.slug}
                     type="button"
                     onClick={() => setFoodModeSlug(mode.slug)}
-                    className={`rounded-2xl border-[2px] px-3 py-3 text-left transition ${
+                    className={`rounded-2xl border px-3 py-3 text-left transition ${
                       selected
-                        ? "border-[#220000] bg-[#fbda50] shadow-[4px_4px_0_0_#220000]"
-                        : "border-[#220000]/30 bg-[#fef9e3] hover:border-[#220000] hover:bg-white"
+                        ? "border-[#efcc9f] bg-[#fff4e7] shadow-[0_12px_26px_-22px_rgba(194,109,40,0.5)]"
+                        : "border-[#eadcca] bg-[#fffdf8] hover:border-[#f0cfaa] hover:bg-[#fff8ef]"
                     }`}
                   >
-                    <p className="text-xl leading-none">{mode.emoji}</p>
-                    <p className="mt-2 text-sm font-bold text-[#220000]">{mode.label}</p>
+                    <p className="text-lg leading-none">{mode.emoji}</p>
+                    <p className="mt-2 text-sm font-semibold text-[#352418]">{mode.label}</p>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-6">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#220000]/70">Energy</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {(["low", "medium", "high"] as EnergyLevel[]).map((value) => (
+            <div className="mt-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8b7564]">Energy</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {ENERGY_OPTIONS.map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setEnergy(value)}
-                    className={`rounded-full border-[2px] px-3 py-2 text-sm font-bold capitalize transition ${
+                    className={`rounded-full border px-3 py-2 text-sm font-semibold capitalize transition ${
                       value === energy
-                        ? "border-[#220000] bg-[#d42213] text-white shadow-[3px_3px_0_0_#220000]"
-                        : "border-[#220000]/35 bg-white text-[#220000] hover:border-[#220000]"
+                        ? "border-[#efc48f] bg-[#fff3e3] text-[#3c2b1d]"
+                        : "border-[#e7d8c8] bg-white text-[#6a5647] hover:border-[#efcc9f]"
                     }`}
                   >
                     {value}
@@ -237,18 +545,18 @@ export function HomeOnePage() {
               </div>
             </div>
 
-            <div className="mt-6">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#220000]/70">Platform</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8b7564]">Platform</p>
+              <div className="mt-2 flex flex-wrap gap-2">
                 {PLATFORM_OPTIONS.map((option) => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => setPlatform(option)}
-                    className={`rounded-full border-[2px] px-3 py-1.5 text-xs font-bold transition sm:text-sm ${
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition sm:text-sm ${
                       option === platform
-                        ? "border-[#220000] bg-[#a7e396] text-[#220000] shadow-[3px_3px_0_0_#220000]"
-                        : "border-[#220000]/30 bg-white text-[#220000] hover:border-[#220000]"
+                        ? "border-[#efc48f] bg-[#fff3e3] text-[#3b2a1d]"
+                        : "border-[#e7d8c8] bg-white text-[#6a5647] hover:border-[#efcc9f]"
                     }`}
                   >
                     {option}
@@ -257,72 +565,88 @@ export function HomeOnePage() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-7 w-full rounded-2xl border-[3px] border-[#220000] bg-[#fbda50] px-4 py-3 text-sm font-black uppercase tracking-[0.2em] text-[#220000] shadow-[6px_6px_0_0_#220000] transition hover:translate-y-[1px] hover:shadow-[4px_4px_0_0_#220000] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Matching..." : "Suggest 3 Picks"}
-            </button>
+            <div className="mt-6 grid gap-2 sm:grid-cols-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-2xl bg-[linear-gradient(135deg,#ffcf96_0%,#ffc07a_100%)] px-4 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#3a2819] shadow-[0_16px_34px_-26px_rgba(194,109,40,0.6)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Matching..." : "Suggest 3 Picks"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSurpriseMe}
+                disabled={loading}
+                className="rounded-2xl border border-[#f0cfa9] bg-[#fff8ef] px-4 py-3 text-sm font-semibold text-[#5f4836] shadow-[0_14px_30px_-26px_rgba(87,60,36,0.45)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                🎲 Surprise Me
+              </button>
+            </div>
           </form>
 
-          <section className="rounded-[2rem] border-[3px] border-[#220000] bg-[#220000] p-5 text-[#fef9e3] shadow-[10px_10px_0_0_#220000] sm:p-6">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#fef9e3]/75">Suggested vibe</p>
+          <section className="rounded-[2rem] border border-[#e7d8c7] bg-[linear-gradient(180deg,#fff8ef_0%,#fff5e8_100%)] p-5 shadow-[0_22px_52px_-34px_rgba(87,60,36,0.26)] sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#836f5f]">Suggested vibe</p>
 
             {!result && !loading && (
-              <div className="mt-6 space-y-3">
-                <p className="text-3xl font-display leading-[1.02] sm:text-4xl">
-                  Pick your meal mood, then we&apos;ll drop three instant matches.
+              <div className="mt-5 space-y-2">
+                <p className="text-3xl font-display leading-[1.08] text-[#2d1f14] sm:text-4xl">
+                  Meal companion mode: quick, cozy, and context-first.
                 </p>
-                <p className="text-sm text-[#fef9e3]/85">
-                  This page is the full experience: title, preferences, and recommendations in one flow.
+                <p className="text-sm text-[#736152]">
+                  Choose a preset or customize preferences, then get three tailored picks instantly.
                 </p>
               </div>
             )}
 
             {loading && (
-              <div className="mt-6 space-y-3">
-                <div className="h-20 animate-pulse rounded-2xl bg-white/15" />
-                <div className="h-20 animate-pulse rounded-2xl bg-white/15" />
-                <div className="h-20 animate-pulse rounded-2xl bg-white/15" />
+              <div className="mt-5 space-y-3">
+                <div className="h-20 animate-pulse rounded-2xl bg-[#f8ead7]" />
+                <div className="h-20 animate-pulse rounded-2xl bg-[#f8ead7]" />
+                <div className="h-20 animate-pulse rounded-2xl bg-[#f8ead7]" />
               </div>
             )}
 
-            {result && selectedFoodMode && heroPick && (
-              <div className="mt-5 rounded-2xl border-[2px] border-[#fef9e3] bg-[#fef9e3] p-4 text-[#220000]">
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#220000]/70">
-                  Hero pick
+            {result && activeFoodMode && heroPick && activeContext && (
+              <div className="mt-5 rounded-2xl border border-[#eadac7] bg-white p-4 shadow-[0_14px_30px_-24px_rgba(87,60,36,0.24)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#866f5d]">Hero pick</p>
+                <h2 className="mt-1 text-3xl font-display leading-[1] text-[#2f1f13] sm:text-4xl">
+                  {heroPick.title}
+                </h2>
+                <p className="mt-2 text-sm font-semibold text-[#4e3b2d]">
+                  {activeFoodMode.emoji} {activeFoodMode.label} • {prettyEnergy(activeContext.energy)}
                 </p>
-                <h2 className="mt-2 text-3xl font-display leading-[0.95] sm:text-4xl">{heroPick.title}</h2>
-                <p className="mt-2 text-sm font-semibold">
-                  {selectedFoodMode.emoji} {selectedFoodMode.label} • {prettyEnergy(energy)}
-                </p>
-                <p className="mt-1 text-sm">{heroPick.whyThisMatch}</p>
+                <p className="mt-1 text-sm text-[#6b5647]">{heroPick.whyThisMatch}</p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={handleRemix}
-                    className="rounded-full border-[2px] border-[#220000] bg-[#fbda50] px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-[#220000] transition hover:-translate-y-[1px]"
+                    className="rounded-full border border-[#efcfa9] bg-[#fff6ea] px-3 py-1.5 text-xs font-semibold text-[#5f4836] transition hover:-translate-y-0.5"
                   >
                     Remix picks
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleSaveForLater(heroPick)}
+                    className="rounded-full border border-[#efcfa9] bg-[#fff6ea] px-3 py-1.5 text-xs font-semibold text-[#5f4836] transition hover:-translate-y-0.5"
+                  >
+                    Save for later
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleShare}
-                    className="rounded-full border-[2px] border-[#220000] bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-[#220000] transition hover:-translate-y-[1px]"
+                    className="rounded-full border border-[#efcfa9] bg-[#fff6ea] px-3 py-1.5 text-xs font-semibold text-[#5f4836] transition hover:-translate-y-0.5"
                   >
                     Share
                   </button>
-                  {shareMessage ? (
-                    <span className="self-center text-xs font-semibold text-[#220000]/70">{shareMessage}</span>
-                  ) : null}
                 </div>
               </div>
             )}
 
+            {actionMessage ? <p className="mt-3 text-xs text-[#7a6555]">{actionMessage}</p> : null}
+
             {error ? (
-              <p className="mt-4 rounded-xl border-[2px] border-[#ff8562] bg-[#ff8562]/15 px-3 py-2 text-xs text-[#fef9e3]">
+              <p className="mt-4 rounded-xl border border-[#ffd2c4] bg-[#ffece7] px-3 py-2 text-xs text-[#8f3d28]">
                 {error}
               </p>
             ) : null}
@@ -330,33 +654,97 @@ export function HomeOnePage() {
         </div>
 
         {result ? (
-          <section className="mt-7 grid gap-4 md:grid-cols-3">
+          <section className="mt-6 grid gap-4 lg:grid-cols-3">
             {result.items.map((item, index) => (
               <article
                 key={item.id}
-                className="rounded-[1.4rem] border-[3px] border-[#220000] bg-[#fef9e3] p-4 text-[#220000] shadow-[8px_8px_0_0_#220000]"
+                className="rounded-3xl border border-[#e7d9c8] bg-white p-4 shadow-[0_18px_40px_-30px_rgba(87,60,36,0.3)] transition hover:-translate-y-0.5"
               >
-                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#220000]/65">
-                  Pick {index + 1}
-                </p>
-                <h3 className="mt-2 text-2xl font-display leading-[1]">{item.title}</h3>
-                <p className="mt-2 text-sm font-semibold">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a7666]">Pick {index + 1}</p>
+                <h3 className="mt-2 text-2xl font-display leading-[1.03] text-[#2f2013]">{item.title}</h3>
+                <p className="mt-1 text-sm font-semibold text-[#564234]">
                   {item.platform} • {item.durationMins} min
                 </p>
-                <p className="mt-1 text-sm">{item.whyThisMatch}</p>
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => trackEvent("open", item.id)}
-                  className="mt-4 inline-block rounded-full border-[2px] border-[#220000] bg-[#d42213] px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-white"
-                >
-                  Open
-                </a>
+                <p className="mt-1 text-sm text-[#6a5647]">{item.whyThisMatch}</p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => trackEvent("open", item.id)}
+                    className="rounded-full bg-[linear-gradient(135deg,#ffcf96_0%,#ffc07a_100%)] px-3 py-1.5 text-xs font-semibold text-[#3c2b1d] shadow-[0_10px_22px_-16px_rgba(194,109,40,0.58)]"
+                  >
+                    Open
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveForLater(item)}
+                    className="rounded-full border border-[#efcfa9] bg-[#fff6ea] px-3 py-1.5 text-xs font-semibold text-[#5f4836]"
+                  >
+                    Save for later
+                  </button>
+                </div>
               </article>
             ))}
           </section>
         ) : null}
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <section className="rounded-3xl border border-[#e7d9c8] bg-white/90 p-4 shadow-[0_16px_36px_-30px_rgba(87,60,36,0.3)]">
+            <h3 className="text-lg font-display text-[#2f2013]">Save for later</h3>
+            {savedPairs.length === 0 ? (
+              <p className="mt-2 text-sm text-[#6a5647]">
+                Save picks to build your cozy watchlist for future meals.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {savedPairs.slice(0, 5).map((pair) => (
+                  <li
+                    key={`${pair.id}-${pair.savedAt}`}
+                    className="rounded-2xl border border-[#f0e3d3] bg-[#fffdf8] px-3 py-2"
+                  >
+                    <p className="text-sm font-semibold text-[#3a2a1d]">{pair.title}</p>
+                    <p className="mt-0.5 text-xs text-[#7a6555]">
+                      {pair.foodModeLabel} • {prettyEnergy(pair.energy)} • {pair.platform}
+                    </p>
+                    <a
+                      href={pair.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-semibold text-[#c26d28] hover:underline"
+                    >
+                      Open saved pick
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-[#e7d9c8] bg-white/90 p-4 shadow-[0_16px_36px_-30px_rgba(87,60,36,0.3)]">
+            <h3 className="text-lg font-display text-[#2f2013]">Recently paired meals</h3>
+            {recentPairs.length === 0 ? (
+              <p className="mt-2 text-sm text-[#6a5647]">
+                Your recent pairings will show up here once you generate your first match.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {recentPairs.slice(0, 6).map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="rounded-2xl border border-[#f0e3d3] bg-[#fffdf8] px-3 py-2 text-sm text-[#4a392c]"
+                  >
+                    <p className="font-semibold text-[#3a2a1d]">{entry.heroTitle}</p>
+                    <p className="mt-0.5 text-xs text-[#7a6555]">
+                      {entry.foodModeLabel} • {prettyEnergy(entry.energy)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );

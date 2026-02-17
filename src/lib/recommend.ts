@@ -33,19 +33,35 @@ export function recommend(input: RecommendInput): RecommendResult {
 
   const energy = input.energy ?? foodMode.defaults.energy;
   const excludeIds = new Set(input.excludeIds ?? []);
+  const preferredTags = new Set(input.preferredTags ?? []);
+  const requestedMaxDuration = input.maxDurationMins
+    ? Math.max(input.maxDurationMins, foodMode.durationWindow.min)
+    : foodMode.durationWindow.max;
+  const strictMinDuration = Math.min(foodMode.durationWindow.min, requestedMaxDuration);
+  const strictMaxDuration = requestedMaxDuration;
 
   let candidates = filterCandidates({
     platform: input.platform,
-    minDuration: foodMode.durationWindow.min,
-    maxDuration: foodMode.durationWindow.max,
+    minDuration: strictMinDuration,
+    maxDuration: strictMaxDuration,
+    maxIntensity: input.maxIntensity,
+    maxPlotDensity: input.maxPlotDensity,
+    requireAudioFollowable: input.requireAudioFollowable ?? false,
+    requireDropInFriendly: input.requireDropInFriendly ?? false,
+    requiredTags: input.requiredTags,
     excludeIds,
   });
 
   if (candidates.length < 3) {
     candidates = filterCandidates({
-      platform: undefined,
-      minDuration: foodMode.durationWindow.min - 4,
-      maxDuration: foodMode.durationWindow.max + 10,
+      platform: input.platform,
+      minDuration: Math.max(DEFAULT_DURATION_WINDOW.min - 2, strictMinDuration - 2),
+      maxDuration: strictMaxDuration + 5,
+      maxIntensity: input.maxIntensity,
+      maxPlotDensity: input.maxPlotDensity,
+      requireAudioFollowable: input.requireAudioFollowable ?? false,
+      requireDropInFriendly: input.requireDropInFriendly ?? false,
+      requiredTags: undefined,
       excludeIds,
     });
   }
@@ -53,14 +69,28 @@ export function recommend(input: RecommendInput): RecommendResult {
   if (candidates.length < 3) {
     candidates = filterCandidates({
       platform: undefined,
-      minDuration: DEFAULT_DURATION_WINDOW.min,
-      maxDuration: DEFAULT_DURATION_WINDOW.max + 8,
+      minDuration: Math.max(DEFAULT_DURATION_WINDOW.min - 2, strictMinDuration - 4),
+      maxDuration: Math.max(DEFAULT_DURATION_WINDOW.max + 8, strictMaxDuration + 8),
+      maxIntensity: input.maxIntensity ? input.maxIntensity + 1 : undefined,
+      maxPlotDensity: input.maxPlotDensity ? input.maxPlotDensity + 1 : undefined,
+      requireAudioFollowable: input.requireAudioFollowable ?? false,
+      requireDropInFriendly: false,
+      requiredTags: undefined,
+      excludeIds,
+    });
+  }
+
+  if (candidates.length < 3) {
+    candidates = filterCandidates({
+      platform: undefined,
+      minDuration: DEFAULT_DURATION_WINDOW.min - 2,
+      maxDuration: DEFAULT_DURATION_WINDOW.max + 12,
       excludeIds: new Set<string>(),
     });
   }
 
   const ranked = candidates
-    .map((item) => rankItem(item, foodMode, energy))
+    .map((item) => rankItem(item, foodMode, energy, preferredTags))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 
@@ -82,11 +112,21 @@ function filterCandidates({
   platform,
   minDuration,
   maxDuration,
+  maxIntensity,
+  maxPlotDensity,
+  requireAudioFollowable,
+  requireDropInFriendly,
+  requiredTags,
   excludeIds,
 }: {
   platform?: string;
   minDuration: number;
   maxDuration: number;
+  maxIntensity?: number;
+  maxPlotDensity?: number;
+  requireAudioFollowable?: boolean;
+  requireDropInFriendly?: boolean;
+  requiredTags?: string[];
   excludeIds: Set<string>;
 }) {
   return contentItems.filter((item) => {
@@ -98,6 +138,29 @@ function filterCandidates({
       return false;
     }
 
+    if (typeof maxIntensity === "number" && item.intensity > maxIntensity) {
+      return false;
+    }
+
+    if (typeof maxPlotDensity === "number" && item.plotDensity > maxPlotDensity) {
+      return false;
+    }
+
+    if (requireAudioFollowable && !item.audioFollowable) {
+      return false;
+    }
+
+    if (requireDropInFriendly && !item.dropInFriendly) {
+      return false;
+    }
+
+    if (requiredTags?.length) {
+      const hasMatchingTag = requiredTags.some((tag) => item.tags.includes(tag));
+      if (!hasMatchingTag) {
+        return false;
+      }
+    }
+
     if (excludeIds.has(item.id)) {
       return false;
     }
@@ -106,7 +169,12 @@ function filterCandidates({
   });
 }
 
-function rankItem(item: ContentItem, foodMode: FoodMode, energy: EnergyLevel): RankedItem {
+function rankItem(
+  item: ContentItem,
+  foodMode: FoodMode,
+  energy: EnergyLevel,
+  preferredTags: Set<string>,
+): RankedItem {
   const boostSet = new Set(foodMode.tagBoosts);
   const penaltySet = new Set(foodMode.tagPenalties);
   const energyTags = new Set(ENERGY_TO_TAGS[energy]);
@@ -117,6 +185,7 @@ function rankItem(item: ContentItem, foodMode: FoodMode, energy: EnergyLevel): R
   score -= Math.abs(item.durationMins - durationCenter) * 1.1;
 
   let modeTagMatches = 0;
+  let preferredTagMatches = 0;
   for (const tag of item.tags) {
     if (boostSet.has(tag)) {
       score += 8;
@@ -129,6 +198,11 @@ function rankItem(item: ContentItem, foodMode: FoodMode, energy: EnergyLevel): R
 
     if (energyTags.has(tag)) {
       score += 4;
+    }
+
+    if (preferredTags.has(tag)) {
+      score += 6;
+      preferredTagMatches += 1;
     }
   }
 
@@ -163,7 +237,7 @@ function rankItem(item: ContentItem, foodMode: FoodMode, energy: EnergyLevel): R
   return {
     ...item,
     score: Number(score.toFixed(2)),
-    whyThisMatch: buildWhyMatch(item, foodMode, energy, modeTagMatches),
+    whyThisMatch: buildWhyMatch(item, foodMode, energy, modeTagMatches, preferredTagMatches),
   };
 }
 
@@ -172,6 +246,7 @@ function buildWhyMatch(
   foodMode: FoodMode,
   energy: EnergyLevel,
   modeTagMatches: number,
+  preferredTagMatches: number,
 ): string {
   const reasons: string[] = [];
 
@@ -189,6 +264,10 @@ function buildWhyMatch(
 
   if (modeTagMatches > 0) {
     reasons.push(`aligned with ${foodMode.label.toLowerCase()} vibe`);
+  }
+
+  if (preferredTagMatches > 0) {
+    reasons.push("matches your quick preset");
   }
 
   if (reasons.length < 2) {

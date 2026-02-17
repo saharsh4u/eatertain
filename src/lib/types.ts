@@ -55,6 +55,13 @@ export interface RecommendInput {
   platform?: PlatformOption;
   locale?: string;
   excludeIds?: string[];
+  maxDurationMins?: number;
+  maxIntensity?: number;
+  maxPlotDensity?: number;
+  requireAudioFollowable?: boolean;
+  requireDropInFriendly?: boolean;
+  requiredTags?: string[];
+  preferredTags?: string[];
 }
 
 export interface RecommendResult {
@@ -69,6 +76,7 @@ export type EventType =
   | "like"
   | "dislike"
   | "share"
+  | "save"
   | "regenerate"
   | "view-results";
 

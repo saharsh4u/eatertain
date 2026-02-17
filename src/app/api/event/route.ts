@@ -7,6 +7,7 @@ const VALID_EVENT_TYPES = new Set([
   "like",
   "dislike",
   "share",
+  "save",
   "regenerate",
   "view-results",
 ]);

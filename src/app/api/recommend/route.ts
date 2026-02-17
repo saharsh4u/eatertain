@@ -37,6 +37,47 @@ export async function POST(request: Request) {
       );
     }
 
+    if (body.maxDurationMins !== undefined) {
+      if (!Number.isFinite(body.maxDurationMins) || body.maxDurationMins < 6) {
+        return NextResponse.json(
+          { error: "maxDurationMins must be a number >= 6" },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (body.maxIntensity !== undefined) {
+      if (!Number.isFinite(body.maxIntensity) || body.maxIntensity < 1 || body.maxIntensity > 5) {
+        return NextResponse.json(
+          { error: "maxIntensity must be between 1 and 5" },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (body.maxPlotDensity !== undefined) {
+      if (!Number.isFinite(body.maxPlotDensity) || body.maxPlotDensity < 1 || body.maxPlotDensity > 5) {
+        return NextResponse.json(
+          { error: "maxPlotDensity must be between 1 and 5" },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (body.requiredTags && !Array.isArray(body.requiredTags)) {
+      return NextResponse.json(
+        { error: "requiredTags must be an array of strings" },
+        { status: 400 },
+      );
+    }
+
+    if (body.preferredTags && !Array.isArray(body.preferredTags)) {
+      return NextResponse.json(
+        { error: "preferredTags must be an array of strings" },
+        { status: 400 },
+      );
+    }
+
     const response = recommend(body);
     return NextResponse.json(response, { status: 200 });
   } catch (error) {
