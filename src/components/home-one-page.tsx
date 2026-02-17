@@ -163,13 +163,13 @@ export function HomeOnePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+    <main className="relative min-h-screen overflow-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="pointer-events-none absolute -top-20 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[#fbda50]/75 blur-3xl" />
       <div className="pointer-events-none absolute -left-24 top-56 h-60 w-60 rounded-full bg-[#d42213]/35 blur-3xl" />
       <div className="pointer-events-none absolute -right-24 bottom-10 h-64 w-64 rounded-full bg-[#a7e396]/45 blur-3xl" />
 
       <div className="mx-auto max-w-7xl">
-        <section className="relative rounded-[2rem] border-[3px] border-[#220000] bg-[#fef9e3]/90 px-5 py-6 shadow-[10px_10px_0_0_#220000] sm:px-8 sm:py-8">
+        <section className="relative rounded-[2rem] border-[3px] border-[#220000] bg-[#fef9e3]/90 px-5 py-5 shadow-[10px_10px_0_0_#220000] sm:px-8 sm:py-6">
           <div className="absolute -right-3 -top-3 rotate-6 rounded-full border-[3px] border-[#220000] bg-[#fbda50] px-4 py-1 text-xs font-black uppercase tracking-[0.18em] text-[#220000]">
             One page
           </div>
@@ -178,7 +178,7 @@ export function HomeOnePage() {
             Moment-based entertainment picker
           </p>
 
-          <h1 className="mt-4 text-center font-display text-[clamp(2.8rem,11vw,8.2rem)] leading-[0.9] tracking-tight text-[#220000]">
+          <h1 className="mt-3 text-center font-display text-[clamp(2rem,7.1vw,5.1rem)] leading-[0.92] tracking-tight text-[#220000]">
             Tell us what
             <br />
             you&apos;re <span className="font-[var(--font-accent)] text-[#d42213]">eating</span>.
