@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fbf8f1;
+  --background: #fef9e3;
   --surface: #ffffff;
-  --surface-soft: #f1ede5;
-  --foreground: #100f0a;
-  --muted: #6f6b63;
-  --accent: #fc7643;
-  --accent-strong: #e95e28;
+  --surface-soft: #f9e17c;
+  --foreground: #220000;
+  --muted: #4f4f4f;
+  --accent-red: #d42213;
+  --accent-yellow: #fbda50;
+  --accent-green: #a7e396;
+  --accent-peach: #ff8562;
 }
 
 @theme inline {
@@ -33,9 +35,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-body), sans-serif;
   background:
-    radial-gradient(circle at 18% 0%, rgba(252, 118, 67, 0.16), transparent 34%),
-    radial-gradient(circle at 85% 18%, rgba(15, 15, 10, 0.05), transparent 30%),
-    linear-gradient(180deg, #fbf8f1 0%, #f7f2e8 54%, #fdfbf6 100%);
+    radial-gradient(circle at 25% 12%, rgba(251, 218, 80, 0.3), transparent 36%),
+    radial-gradient(circle at 74% 6%, rgba(212, 34, 19, 0.12), transparent 32%),
+    linear-gradient(180deg, #fef9e3 0%, #fff7dc 48%, #fef9e3 100%);
 }
 
 h1,
@@ -51,20 +53,21 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   main {
-    animation: fade-in 420ms ease-out;
+    animation: rise-in 440ms ease-out;
   }
 }
 
-@keyframes fade-in {
+@keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;

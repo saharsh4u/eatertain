@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
-import { Fraunces, Lobster, Sora } from "next/font/google";
+import { Lobster, Shrikhand, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const displayFont = Fraunces({
+const displayFont = Shrikhand({
   subsets: ["latin"],
   variable: "--font-display",
-  weight: ["700", "800", "900"],
-  style: ["normal", "italic"],
+  weight: "400",
 });
 
-const bodyFont = Sora({
+const bodyFont = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-body",
   weight: ["400", "500", "600", "700"],
