@@ -456,10 +456,23 @@ export function HomeOnePage() {
           </div>
 
           <h1 className="mt-4 text-center font-display text-[clamp(1.75rem,4.9vw,3.95rem)] leading-[1.02] tracking-tight text-[#2d1f14]">
-            Tell us what you&apos;re <span className="font-[var(--font-accent)] text-[#e7682f]">eating</span>.
-            <br />
-            We pick what to watch.
+            What are we eating today?
           </h1>
+
+          <div className="mt-4 flex justify-center">
+            <div className="w-[210px] overflow-hidden rounded-2xl border border-[#ecdcc8] bg-white/90 p-2 shadow-[0_14px_28px_-22px_rgba(87,60,36,0.35)] sm:w-[250px]">
+              <video
+                className="h-auto w-full rounded-xl"
+                src="/media/homepage-reel.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls
+                preload="metadata"
+              />
+            </div>
+          </div>
         </section>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.06fr_0.94fr]">
